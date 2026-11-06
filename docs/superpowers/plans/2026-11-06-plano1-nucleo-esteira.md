@@ -181,13 +181,13 @@ it('falha se não existir o serviço sob-medida', async () => { /* fixture sem s
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-it('resolve cliente pelo grupo de WhatsApp', async () => { /* criarCliente Fiore, vincularCanal g1, resolver → nome 'Fiore' */ });
+it('resolve cliente pelo grupo de WhatsApp', async () => { /* criarCliente Fiori, vincularCanal g1, resolver → nome 'Fiori' */ });
 it('recusa canal já vinculado a outro cliente', async () => {
   await expect(vincularCanal(db, b.id, { tipo: 'whatsapp_grupo', identificador: 'g1' }, 'operador'))
     .rejects.toBeInstanceOf(CanalJaVinculado);
 });
 it('vincular o mesmo canal ao mesmo cliente é idempotente', async () => { /* 2x sem erro */ });
-it('e-mail é resolvido sem diferenciar maiúsculas', async () => { /* vincula 'Financeiro@Fiore.com' , resolve 'financeiro@fiore.com' */ });
+it('e-mail é resolvido sem diferenciar maiúsculas', async () => { /* vincula 'Financeiro@Fiori.com' , resolve 'financeiro@fiori.com' */ });
 it('canal desconhecido → null', async () => {});
 it('cada operação grava auditoria', async () => { /* conta linhas em auditoria com acao 'cliente.criado','canal.vinculado' */ });
 ```
@@ -338,7 +338,7 @@ Regras, em ordem:
 - [ ] **Step 1: Write the failing tests** — com `ClassificadorFake` (retorno configurável + contador de chamadas):
 
 ```ts
-it('evento do grupo da Fiore classificado vira demanda', async () => {});
+it('evento do grupo da Fiori classificado vira demanda', async () => {});
 it('mesmo idExterno duas vezes → uma demanda, segunda retorna duplicado e não chama classificador', async () => {
   const r1 = await ingerirEvento(db, deps, e); const r2 = await ingerirEvento(db, deps, e);
   expect(r2).toEqual({ eventoId: r1.eventoId, status: 'duplicado' });
@@ -419,4 +419,4 @@ it('corpo inválido → 400 com nome do campo', async () => {});
 
 ## Próximos planos (fora deste)
 
-Plano 2 (canais + classificador Claude + fila Redis), Plano 3 (painel + Telegram), Plano 4 (agentes Escopo/QA/Publicador), Plano 5 (serviços do catálogo), Plano 6 (servidor próprio + migração da hospedagem atual e do app.grupofiore.com.br) — ver spec §14.1.
+Plano 2 (canais + classificador Claude + fila Redis), Plano 3 (painel + Telegram), Plano 4 (agentes Escopo/QA/Publicador), Plano 5 (serviços do catálogo), Plano 6 (servidor próprio + migração da hospedagem atual e do app.grupofiori.com.br) — ver spec §14.1.

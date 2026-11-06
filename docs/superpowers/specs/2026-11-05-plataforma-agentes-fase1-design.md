@@ -21,7 +21,7 @@ O objetivo é uma **plataforma própria, em servidor dedicado**, onde agentes de
 3. O agente de QA bloqueia entregas com falha e devolve ao construtor com relatório; após 3 tentativas sem sucesso, escala ao operador.
 4. Uma publicação em produção que falhe no teste pós-deploy é revertida automaticamente.
 5. Adicionar um **novo cliente** exige apenas cadastro (sem código). Adicionar um **novo tipo de serviço** exige apenas um novo modelo de catálogo (sem alterar a esteira).
-6. Clientes de teste: **Grupo Fiore** (validação de pagamentos WhatsApp × sistema) e **um cliente de dashboard** (ou planilha de exemplo).
+6. Clientes de teste: **Grupo Fiori** (validação de pagamentos WhatsApp × sistema) e **um cliente de dashboard** (ou planilha de exemplo).
 
 ### 1.2 Fora do escopo da Fase 1
 
@@ -173,7 +173,7 @@ rotinas_operacao:
 - Configuração por cliente (no escopo): quais canais/grupos monitorar, o que extrair (ex.: valor, identificador, data), como consultar o sistema (API/banco, somente leitura), tolerâncias, para quem alertar.
 - Resultado por item: `confere`, `divergente`, `nao_encontrado`, `pendente_verificacao` (sistema indisponível), `revisao_humana` (baixa confiança na extração).
 - QA extra: **conjunto de mensagens rotuladas** por cliente; o extrator precisa manter **≥ 98% de acerto** para ser publicado ou alterado.
-- Cliente de teste: Grupo Fiore (confirmações de pagamento no grupo × valores no app).
+- Cliente de teste: Grupo Fiori (confirmações de pagamento no grupo × valores no app).
 
 **C. Sob medida**
 - Qualquer pedido fora do catálogo. Escopo montado do zero; construtor = agente Dev; QA aplica portões padrão + critérios de aceite do escopo.
@@ -292,7 +292,7 @@ A Fase 1 é **compatível com GitHub Free** (Organização gratuita):
 3. Painel mínimo: caixa de entrada, aprovações, clientes, demandas.
 4. Canais: e-mail (n8n) e WhatsApp (Evolution API) → eventos.
 5. Agentes de Escopo, QA e Publicador (comuns a todos os serviços).
-6. Serviço B — Validação/Conciliação, com a Fiore como cliente de teste.
+6. Serviço B — Validação/Conciliação, com a Fiori como cliente de teste.
 7. Serviço A — Planilha → Dashboard.
 8. Serviço C — Sob medida (agente Dev).
 9. Operação: rotinas agendadas e smoke tests periódicos.
@@ -309,13 +309,13 @@ Cada plano entrega software funcional e testável por si só:
 | 2 | Canais + triagem com IA: e-mail (n8n), WhatsApp (Evolution API), fila Redis, classificador Claude | Não |
 | 3 | Painel do operador (Next.js) + notificações Telegram | Não |
 | 4 | Agentes comuns: Escopo, QA (portões 1–3), Publicador (deploy/rollback) | Parcial (staging local) |
-| 5 | Serviços do catálogo: Validação/Conciliação (Fiore), Planilha → Dashboard, Sob medida | Não |
-| 6 | **Servidor próprio e migração:** provisionamento, Tailscale, Traefik, backups, runner; migração dos sites da hospedagem compartilhada atual e do app **app.grupofiore.com.br** para o servidor | **Sim** |
+| 5 | Serviços do catálogo: Validação/Conciliação (Fiori), Planilha → Dashboard, Sob medida | Não |
+| 6 | **Servidor próprio e migração:** provisionamento, Tailscale, Traefik, backups, runner; migração dos sites da hospedagem compartilhada atual e do app **app.grupofiori.com.br** para o servidor | **Sim** |
 
 ## 15. Decisões em aberto
 
-- **Provedor do servidor** (HostGator VPS/dedicado ou outro) — não bloqueia os planos 1–5; necessário antes do plano 6. Intenção: sair da hospedagem compartilhada e concentrar todos os serviços (incluindo o app da Fiore) no servidor próprio.
-- **App app.grupofiore.com.br:** levantar stack, banco de dados, domínio/DNS e variáveis de ambiente antes do plano 6.
+- **Provedor do servidor** (HostGator VPS/dedicado ou outro) — não bloqueia os planos 1–5; necessário antes do plano 6. Intenção: sair da hospedagem compartilhada e concentrar todos os serviços (incluindo o app da Fiori) no servidor próprio.
+- **App app.grupofiori.com.br:** levantar stack, banco de dados, domínio/DNS e variáveis de ambiente antes do plano 6.
 - **Canal privado do operador:** Telegram (mais simples e oficial) ou WhatsApp — padrão sugerido: Telegram.
-- **Acesso ao sistema da Fiore:** confirmar se há API ou acesso de leitura ao banco.
+- **Acesso ao sistema da Fiori:** confirmar se há API ou acesso de leitura ao banco.
 - **Cliente de teste para dashboard:** cliente real ou planilha de exemplo.
