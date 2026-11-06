@@ -299,9 +299,23 @@ A Fase 1 é **compatível com GitHub Free** (Organização gratuita):
 
 ---
 
+### 14.1 Divisão em planos de implementação
+
+Cada plano entrega software funcional e testável por si só:
+
+| Plano | Conteúdo | Depende de hospedagem? |
+|-------|----------|------------------------|
+| 1 | **Núcleo da esteira:** dados, clientes/canais, catálogo, máquina de etapas, aprovações, auditoria, ingestão de eventos, API | Não (roda local via Docker) |
+| 2 | Canais + triagem com IA: e-mail (n8n), WhatsApp (Evolution API), fila Redis, classificador Claude | Não |
+| 3 | Painel do operador (Next.js) + notificações Telegram | Não |
+| 4 | Agentes comuns: Escopo, QA (portões 1–3), Publicador (deploy/rollback) | Parcial (staging local) |
+| 5 | Serviços do catálogo: Validação/Conciliação (Fiore), Planilha → Dashboard, Sob medida | Não |
+| 6 | **Servidor próprio e migração:** provisionamento, Tailscale, Traefik, backups, runner; migração dos sites da hospedagem compartilhada atual e do app **app.grupofiore.com.br** para o servidor | **Sim** |
+
 ## 15. Decisões em aberto
 
-- **Provedor do servidor** (HostGator VPS ou outro) — não bloqueia o design; necessário antes da etapa 1 do plano.
+- **Provedor do servidor** (HostGator VPS/dedicado ou outro) — não bloqueia os planos 1–5; necessário antes do plano 6. Intenção: sair da hospedagem compartilhada e concentrar todos os serviços (incluindo o app da Fiore) no servidor próprio.
+- **App app.grupofiore.com.br:** levantar stack, banco de dados, domínio/DNS e variáveis de ambiente antes do plano 6.
 - **Canal privado do operador:** Telegram (mais simples e oficial) ou WhatsApp — padrão sugerido: Telegram.
 - **Acesso ao sistema da Fiore:** confirmar se há API ou acesso de leitura ao banco.
 - **Cliente de teste para dashboard:** cliente real ou planilha de exemplo.
