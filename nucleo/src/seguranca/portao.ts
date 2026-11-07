@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Db, Tx } from '../db/cliente.js';
 import { aprovacoes, decisoesPolitica, demandas, niveisAutonomia } from '../db/schema.js';
 import type { Catalogo } from '../catalogo/carregar.js';
@@ -10,7 +10,8 @@ import { estaPausado } from './pausas.js';
 
 export const NIVEL_PADRAO: NivelAutonomia = 'N2';
 const NIVEL_REBAIXADO: NivelAutonomia = 'N1';
-const MOTIVOS_REBAIXAMENTO = new Set(['ferramenta_nao_permitida', 'escopo_cliente']);
+// Violações (spec de segurança §5): ferramenta fora da lista, desconhecida ou mirando outro cliente.
+const MOTIVOS_REBAIXAMENTO = new Set(['ferramenta_nao_permitida', 'ferramenta_desconhecida', 'escopo_cliente']);
 
 function comoNivel(v: string): NivelAutonomia {
   if (!(NIVEIS as readonly string[]).includes(v)) throw new Error(`Nível de autonomia inválido: ${v}`);
@@ -63,12 +64,14 @@ export function autorizarChamada(
       config,
     );
 
+    // Registro fiel: argumentos ausentes viram JSON null, nunca {}.
+    const argumentos = p.argumentos ?? null;
     await tx.insert(decisoesPolitica).values({
       demandaId: demanda.id,
       clienteId: demanda.clienteId,
       agente: p.agente,
       ferramenta: p.ferramenta,
-      argumentos: p.argumentos ?? {},
+      argumentos: argumentos === null ? sql`'null'::jsonb` : argumentos,
       nivelAutonomia: nivel,
       decisao: decisao.decisao,
       motivo: decisao.motivo,
@@ -80,7 +83,7 @@ export function autorizarChamada(
         .values({
           demandaId: demanda.id,
           tipo: 'acao',
-          detalhes: { ferramenta: p.ferramenta, argumentos: p.argumentos },
+          detalhes: { ferramenta: p.ferramenta, argumentos },
         })
         .returning({ id: aprovacoes.id });
       await registrarAuditoria(tx, {

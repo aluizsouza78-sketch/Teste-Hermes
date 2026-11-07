@@ -1,5 +1,11 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, {
+  type FastifyError,
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+  type FastifyServerOptions,
+} from 'fastify';
 import { desc, eq } from 'drizzle-orm';
 import { z, ZodError } from 'zod';
 import type { Db } from '../db/cliente.js';
@@ -45,6 +51,8 @@ export type DepsApi = {
   classificador: Classificador;
   operadorToken: string;
   configPolitica: ConfigPolitica;
+  /** Configuração de log do Fastify (pino). Padrão false: silencioso (testes). */
+  logger?: FastifyServerOptions['logger'];
 };
 
 const LIMITE_CORPO = 1_048_576;
@@ -79,11 +87,12 @@ const esquemas = {
   acao: z.object({
     acao: z.enum([
       'submeter_escopo', 'concluir_construcao', 'qa_aprovado', 'qa_reprovado',
-      'producao_ok', 'producao_falhou', 'escalar', 'cancelar',
+      'producao_ok', 'producao_falhou', 'escalar',
     ]),
     agente: textoNaoVazio,
     motivo: textoNaoVazio.optional(),
   }),
+  cancelamento: z.object({ motivo: textoNaoVazio }),
   decisao: z.object({ decisao: z.enum(['aprovar', 'recusar']), comentario: z.string().optional() }),
   auditoriaQuery: z.object({
     alvoId: id.optional(),
@@ -142,10 +151,10 @@ function statusDoErro(err: unknown): { status: number; erro: string } | null {
 }
 
 export function construirApp(deps: DepsApi): FastifyInstance {
-  const { db, catalogo, classificador, operadorToken, configPolitica } = deps;
-  const app = Fastify({ bodyLimit: LIMITE_CORPO });
+  const { db, catalogo, classificador, operadorToken, configPolitica, logger = false } = deps;
+  const app = Fastify({ bodyLimit: LIMITE_CORPO, logger });
 
-  app.setErrorHandler((err: FastifyError | Error, _req, reply) => {
+  app.setErrorHandler((err: FastifyError | Error, req, reply) => {
     if (err instanceof ZodError) {
       return reply.status(400).send({
         erro: 'Requisição inválida',
@@ -159,7 +168,7 @@ export function construirApp(deps: DepsApi): FastifyInstance {
     if (typeof status === 'number' && status >= 400 && status < 500) {
       return reply.status(status).send({ erro: status === 413 ? 'Corpo grande demais' : 'Requisição inválida' });
     }
-    app.log.error(err);
+    req.log.error({ err }, 'erro interno');
     return reply.status(500).send({ erro: 'Erro interno' });
   });
 
@@ -224,6 +233,13 @@ export function construirApp(deps: DepsApi): FastifyInstance {
         throw new ZodError([{ code: 'custom', path: ['motivo'], message: 'motivo é obrigatório para escalar', input: undefined }]);
       }
       return executarAcao(db, demandaId, b.acao, { tipo: 'agente', nome: b.agente }, b.motivo);
+    });
+
+    // Cancelamento é decisão do operador (agentes não cancelam; use escalar).
+    r.post('/demandas/:id/cancelar', async (req) => {
+      const { id: demandaId } = esquemas.idParam.parse(req.params);
+      const b = esquemas.cancelamento.parse(req.body);
+      return executarAcao(db, demandaId, 'cancelar', { tipo: 'operador' }, b.motivo);
     });
 
     r.get('/aprovacoes', async () => listarAprovacoesPendentes(db));

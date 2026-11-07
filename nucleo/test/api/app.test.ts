@@ -114,17 +114,55 @@ describe('API HTTP', () => {
     expect((await req('POST', '/aprovacoes/11111111-1111-4111-8111-111111111111/decisao', { decisao: 'aprovar' })).statusCode).toBe(404);
   });
 
-  it('ação de operador em /demandas/:id/acoes → 400; escalar exige motivo; agente cancelar → 403', async () => {
+  it('ação de operador em /demandas/:id/acoes → 400 (inclui cancelar); escalar exige motivo', async () => {
     const { demandaId } = await novaDemanda();
-    for (const acao of ['aprovar', 'recusar', 'retomar']) {
+    for (const acao of ['aprovar', 'recusar', 'retomar', 'cancelar']) {
       expect((await req('POST', `/demandas/${demandaId}/acoes`, { acao, agente: 'gestor' })).statusCode).toBe(400);
     }
     expect((await req('POST', `/demandas/${demandaId}/acoes`, { acao: 'escalar', agente: 'gestor' })).statusCode).toBe(400);
     expect((await req('POST', `/demandas/${demandaId}/acoes`, { acao: 'escalar', agente: 'gestor', motivo: 'dúvida' })).statusCode).toBe(200);
-    expect((await req('POST', `/demandas/${demandaId}/acoes`, { acao: 'cancelar', agente: 'gestor' })).statusCode).toBe(403);
     expect((await req('POST', `/demandas/${demandaId}/acoes`, { acao: 'producao_ok', agente: 'gestor' })).statusCode).toBe(409);
-    expect((await req('POST', `/demandas/${demandaId}/acoes`, { acao: 'cancelar', agente: '' })).statusCode).toBe(400);
-    expect((await req('POST', '/demandas/11111111-1111-4111-8111-111111111111/acoes', { acao: 'cancelar', agente: 'g' })).statusCode).toBe(404);
+    expect((await req('POST', `/demandas/${demandaId}/acoes`, { acao: 'submeter_escopo', agente: '' })).statusCode).toBe(400);
+    expect((await req('POST', '/demandas/11111111-1111-4111-8111-111111111111/acoes', { acao: 'submeter_escopo', agente: 'g' })).statusCode).toBe(404);
+  });
+
+  it('POST /demandas/:id/cancelar: operador cancela, fecha aprovações pendentes; 400/404/409', async () => {
+    const { demandaId } = await novaDemanda();
+    await req('POST', `/demandas/${demandaId}/acoes`, { acao: 'submeter_escopo', agente: 'gestor' });
+    expect((await req('GET', '/aprovacoes')).json()).toHaveLength(1);
+    expect((await req('POST', `/demandas/${demandaId}/cancelar`, {})).statusCode).toBe(400);
+    expect((await req('POST', `/demandas/${demandaId}/cancelar`, { motivo: '  ' })).statusCode).toBe(400);
+    expect((await req('POST', '/demandas/11111111-1111-4111-8111-111111111111/cancelar', { motivo: 'x' })).statusCode).toBe(404);
+    const r = await req('POST', `/demandas/${demandaId}/cancelar`, { motivo: 'cliente desistiu' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual({ etapa: 'cancelada', tentativasQa: 0 });
+    expect((await req('GET', '/aprovacoes')).json()).toHaveLength(0);
+    const aud = (await req('GET', `/auditoria?alvoId=${demandaId}`)).json() as Array<{ acao: string; ator: string; detalhes: Record<string, unknown> }>;
+    expect(aud.find((a) => a.acao === 'demanda.transicao' && a.detalhes.para === 'cancelada')).toMatchObject({
+      ator: 'operador', detalhes: { motivo: 'cliente desistiu' },
+    });
+    expect((await req('POST', `/demandas/${demandaId}/cancelar`, { motivo: 'de novo' })).statusCode).toBe(409);
+    expect((await req('POST', `/demandas/${demandaId}/cancelar`, { motivo: 'x' }, {})).statusCode).toBe(401);
+  });
+
+  it('GET /aprovacoes mostra o fato exato: detalhes e etapa da demanda', async () => {
+    const { clienteId, demandaId } = await novaDemanda();
+    // N0: até leitura exige aprovação → aprovação 'acao' com ferramenta e argumentos.
+    await req('PUT', `/clientes/${clienteId}/servicos/planilha-dashboard/autonomia`, { nivel: 'N0', justificativa: 'teste' });
+    const aut = await req('POST', '/politica/autorizar', { demandaId, agente: 'gestor', ferramenta: 'ler_demanda', argumentos: { demandaId } });
+    expect(aut.json().decisao).toBe('exigir_aprovacao');
+    await req('POST', `/demandas/${demandaId}/acoes`, { acao: 'escalar', agente: 'gestor', motivo: 'cliente pediu algo fora do escopo' });
+
+    const pend = (await req('GET', '/aprovacoes')).json() as Array<Record<string, unknown>>;
+    expect(pend).toHaveLength(2);
+    const acao = pend.find((a) => a.tipo === 'acao');
+    const escalada = pend.find((a) => a.tipo === 'escalada');
+    expect(acao).toMatchObject({
+      demandaId, etapa: 'escalada', detalhes: { ferramenta: 'ler_demanda', argumentos: { demandaId } },
+    });
+    expect(escalada).toMatchObject({
+      demandaId, etapa: 'escalada', detalhes: { motivo: 'cliente pediu algo fora do escopo' },
+    });
   });
 
   it('corpo inválido → 400 com nome do campo; GET /demandas?clienteId= vazio → 400', async () => {
@@ -198,14 +236,19 @@ describe('API HTTP', () => {
     expect((await req('POST', '/execucoes', { demandaId: '11111111-1111-4111-8111-111111111111', agente: 'g', modelo: 'm', versaoPrompt: 'v' })).statusCode).toBe(404);
   });
 
-  it('erro interno → 500 genérico sem vazar detalhes', async () => {
+  it('erro interno → 500 genérico sem vazar detalhes, mas registrado no log', async () => {
+    const linhas: string[] = [];
     const quebrado = construirApp({
       db: { select: () => { throw new Error('segredo-interno-xyz'); } } as unknown as Db,
       catalogo, classificador: new ClassificadorFake(), operadorToken: TOKEN, configPolitica,
+      logger: { level: 'info', redact: ['req.headers.authorization'], stream: { write: (l: string) => { linhas.push(l); } } },
     });
     const r = await quebrado.inject({ method: 'GET', url: '/clientes', headers: auth });
     expect(r.statusCode).toBe(500);
     expect(r.body).not.toContain('segredo-interno-xyz');
+    const log = linhas.join('');
+    expect(log).toContain('segredo-interno-xyz');
+    expect(log).not.toContain(TOKEN);
   });
 
   it('corpo > 1 MB → 413', async () => {

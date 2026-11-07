@@ -22,8 +22,9 @@ const cfg: ConfigPolitica = {
     ['ler_repo', { nome: 'ler_repo', classe: 'leitura', argumentos: argsSchema, permitidaEmN3: false }],
     ['publicar', { nome: 'publicar', classe: 'irreversivel_ou_externa', argumentos: argsSchema, permitidaEmN3: false }],
     ['apagar', { nome: 'apagar', classe: 'escrita_reversivel', argumentos: argsSchema, permitidaEmN3: false }],
+    ['notificar', { nome: 'notificar', classe: 'irreversivel_ou_externa', argumentos: z.unknown(), permitidaEmN3: false }],
   ]),
-  permissoes: { dev: ['ler_repo', 'publicar'] },
+  permissoes: { dev: ['ler_repo', 'publicar', 'notificar'] },
 };
 
 /** Nível efetivo (ausente → N2, como no Portão). */
@@ -117,11 +118,30 @@ describe('autorizarChamada', () => {
     expect(await db.select().from(auditoria).where(eq(auditoria.acao, 'autonomia.rebaixada'))).toHaveLength(0);
   });
 
-  it('outras negações não rebaixam, mas são gravadas', async () => {
+  it('ferramenta_desconhecida rebaixa para N1 e audita', async () => {
     const r = await autorizarChamada(db, cfg, { demandaId: dA, agente: 'dev', ferramenta: 'nao_existe', argumentos: {} });
     expect(r).toEqual({ decisao: 'negar', motivo: 'ferramenta_desconhecida' });
+    expect(await nivelDe(db, clienteA, 'sob-medida')).toBe('N1');
+    const [a] = await db.select().from(auditoria).where(eq(auditoria.acao, 'autonomia.rebaixada'));
+    expect(a.detalhes).toMatchObject({ de: 'N2', para: 'N1', motivo: 'ferramenta_desconhecida' });
+  });
+
+  it('outras negações (argumentos_invalidos) não rebaixam, mas são gravadas', async () => {
+    const r = await autorizarChamada(db, cfg, { demandaId: dA, agente: 'dev', ferramenta: 'ler_repo', argumentos: { repo: 42 } });
+    expect(r).toEqual({ decisao: 'negar', motivo: 'argumentos_invalidos' });
     expect(await nivelDe(db, clienteA, 'sob-medida')).toBe('N2');
     expect(await db.select().from(decisoesPolitica)).toHaveLength(1);
+  });
+
+  it('argumentos ausentes são gravados como null (sem coerção para {})', async () => {
+    for (const argumentos of [undefined, null]) {
+      const r = await autorizarChamada(db, cfg, { demandaId: dA, agente: 'dev', ferramenta: 'notificar', argumentos });
+      expect(r.decisao).toBe('exigir_aprovacao');
+      const [ap] = await db.select().from(aprovacoes).where(eq(aprovacoes.id, r.aprovacaoId!));
+      expect(ap.detalhes).toEqual({ ferramenta: 'notificar', argumentos: null });
+    }
+    const ds = await db.select().from(decisoesPolitica);
+    expect(ds.map((d) => d.argumentos)).toEqual([null, null]);
   });
 
   it('exigir_aprovacao cria aprovação "acao" com ferramenta e argumentos exatos', async () => {

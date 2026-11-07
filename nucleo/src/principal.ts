@@ -38,6 +38,11 @@ async function main(): Promise<void> {
     classificador: new ClassificadorIndisponivel(),
     operadorToken,
     configPolitica,
+    logger: {
+      level: process.env.LOG_LEVEL ?? 'info',
+      // Nunca registrar o token do operador.
+      redact: ['req.headers.authorization'],
+    },
   });
   await app.listen({ port: porta, host: '0.0.0.0' });
 }

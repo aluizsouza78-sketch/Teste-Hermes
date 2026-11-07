@@ -207,11 +207,19 @@ export function decidirAprovacao(
   comentario: string | null,
 ): Promise<EstadoDemanda> {
   return db.transaction(async (tx) => {
+    // Mesma ordem de travas de aplicar() (demanda → aprovação), evitando deadlock
+    // com um cancelamento concorrente: lê a aprovação sem trava só para achar a demanda.
+    const [ref] = await tx
+      .select({ demandaId: aprovacoes.demandaId })
+      .from(aprovacoes)
+      .where(eq(aprovacoes.id, aprovacaoId));
+    if (!ref) throw new AprovacaoNaoEncontrada(aprovacaoId);
+    const demanda = await travarDemanda(tx, ref.demandaId);
+
     const [ap] = await tx.select().from(aprovacoes).where(eq(aprovacoes.id, aprovacaoId)).for('update');
     if (!ap) throw new AprovacaoNaoEncontrada(aprovacaoId);
     if (ap.status !== 'pendente') throw new AprovacaoJaDecidida(aprovacaoId, ap.status);
 
-    const demanda = await travarDemanda(tx, ap.demandaId);
     const aprovar = decisao === 'aprovar';
     await tx
       .update(aprovacoes)
@@ -238,16 +246,29 @@ export function decidirAprovacao(
   });
 }
 
-export async function listarAprovacoesPendentes(db: Db): Promise<
-  Array<{ id: string; tipo: string; demandaId: string; clienteNome: string; tituloDemanda: string; criadoEm: Date }>
-> {
-  return db
+export interface AprovacaoPendente {
+  id: string;
+  tipo: string;
+  demandaId: string;
+  clienteNome: string;
+  tituloDemanda: string;
+  /** Etapa atual da demanda. */
+  etapa: Etapa;
+  /** Fato exato sob aprovação, como gravado: {ferramenta, argumentos} em 'acao', {motivo} em escalada. */
+  detalhes: unknown;
+  criadoEm: Date;
+}
+
+export async function listarAprovacoesPendentes(db: Db): Promise<AprovacaoPendente[]> {
+  const rows = await db
     .select({
       id: aprovacoes.id,
       tipo: aprovacoes.tipo,
       demandaId: aprovacoes.demandaId,
       clienteNome: clientes.nome,
       tituloDemanda: demandas.titulo,
+      etapa: demandas.etapa,
+      detalhes: aprovacoes.detalhes,
       criadoEm: aprovacoes.criadoEm,
     })
     .from(aprovacoes)
@@ -255,6 +276,7 @@ export async function listarAprovacoesPendentes(db: Db): Promise<
     .innerJoin(clientes, eq(demandas.clienteId, clientes.id))
     .where(eq(aprovacoes.status, 'pendente'))
     .orderBy(aprovacoes.criadoEm);
+  return rows as AprovacaoPendente[];
 }
 
 export async function listarDemandas(db: Db, filtro: { clienteId?: string }): Promise<DemandaResumo[]> {
