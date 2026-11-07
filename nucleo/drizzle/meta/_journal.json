@@ -15,6 +15,13 @@
       "when": 1794050728811,
       "tag": "0001_auditoria_imutavel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794051794509,
+      "tag": "0002_autonomia_em_tabela_propria",
+      "breakpoints": true
     }
   ]
 }

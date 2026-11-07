@@ -1,6 +1,8 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db, Tx } from '../db/cliente.js';
-import { aprovacoes, decisoesPolitica, demandas, servicosContratados } from '../db/schema.js';
+import { aprovacoes, decisoesPolitica, demandas, niveisAutonomia } from '../db/schema.js';
+import type { Catalogo } from '../catalogo/carregar.js';
+import { ServicoInexistente } from '../clientes/repositorio.js';
 import { registrarAuditoria } from '../auditoria/registrar.js';
 import { DemandaNaoEncontrada } from '../esteira/servico.js';
 import { autorizar, NIVEIS, type ConfigPolitica, type Decisao, type NivelAutonomia } from './politica.js';
@@ -15,23 +17,25 @@ function comoNivel(v: string): NivelAutonomia {
   return v as NivelAutonomia;
 }
 
-/** Lê (e trava) o nível do cliente+serviço; ausente → N2. */
+/** Lê (e trava) o nível do cliente+serviço em niveis_autonomia; ausente → N2. */
 async function lerNivel(tx: Tx, clienteId: string, servicoId: string): Promise<NivelAutonomia> {
   const [r] = await tx
-    .select({ nivel: servicosContratados.nivelAutonomia })
-    .from(servicosContratados)
-    .where(and(eq(servicosContratados.clienteId, clienteId), eq(servicosContratados.servicoId, servicoId)))
+    .select({ nivel: niveisAutonomia.nivel })
+    .from(niveisAutonomia)
+    .where(and(eq(niveisAutonomia.clienteId, clienteId), eq(niveisAutonomia.servicoId, servicoId)))
     .for('update');
   return r ? comoNivel(r.nivel) : NIVEL_PADRAO;
 }
 
+/** Grava o nível sem tocar em servicos_contratados (autonomia não implica contrato). */
 async function gravarNivel(tx: Tx, clienteId: string, servicoId: string, nivel: NivelAutonomia): Promise<void> {
+  const agora = new Date();
   await tx
-    .insert(servicosContratados)
-    .values({ clienteId, servicoId, configuracao: {}, nivelAutonomia: nivel })
+    .insert(niveisAutonomia)
+    .values({ clienteId, servicoId, nivel, atualizadoEm: agora })
     .onConflictDoUpdate({
-      target: [servicosContratados.clienteId, servicosContratados.servicoId],
-      set: { nivelAutonomia: nivel },
+      target: [niveisAutonomia.clienteId, niveisAutonomia.servicoId],
+      set: { nivel, atualizadoEm: agora },
     });
 }
 
@@ -114,6 +118,7 @@ export function autorizarChamada(
 
 export async function definirAutonomia(
   db: Db,
+  catalogo: Catalogo,
   clienteId: string,
   servicoId: string,
   nivel: NivelAutonomia,
@@ -122,6 +127,7 @@ export async function definirAutonomia(
 ): Promise<void> {
   if (!justificativa.trim()) throw new Error('definirAutonomia exige justificativa');
   comoNivel(nivel);
+  if (!catalogo.obter(servicoId)) throw new ServicoInexistente(servicoId);
   await db.transaction(async (tx) => {
     const de = await lerNivel(tx, clienteId, servicoId);
     await gravarNivel(tx, clienteId, servicoId, nivel);

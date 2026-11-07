@@ -77,7 +77,13 @@ export function criarDemanda(
   d: { clienteId: string; servicoId: string; titulo: string; eventoId?: string },
   ator: Ator,
 ): Promise<{ id: string }> {
-  return db.transaction((tx) => criarDemandaTx(tx, d, nomeAtor(ator)));
+  return db.transaction(async (tx) => {
+    // Pausa de emergência também impede agentes de abrir demandas.
+    if (ator.tipo === 'agente' && (await estaPausado(tx, { clienteId: d.clienteId, agente: ator.nome }))) {
+      throw new Pausado(d.clienteId, ator.nome);
+    }
+    return criarDemandaTx(tx, d, nomeAtor(ator));
+  });
 }
 
 export async function obterDemanda(db: Db | Tx, id: string): Promise<DemandaResumo> {

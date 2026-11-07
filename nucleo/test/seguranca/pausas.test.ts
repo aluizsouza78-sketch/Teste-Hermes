@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { criarDbTeste, type Db } from '../../src/db/cliente.js';
-import { auditoria, pausas } from '../../src/db/schema.js';
+import { auditoria, demandas, pausas } from '../../src/db/schema.js';
 import { criarCliente } from '../../src/clientes/repositorio.js';
 import { criarDemanda, executarAcao, obterDemanda } from '../../src/esteira/servico.js';
 import type { Ator } from '../../src/esteira/maquina.js';
@@ -38,6 +38,15 @@ describe('pausa de emergência', () => {
     expect(await estaPausado(db, { clienteId: clienteB, agente: 'construtor' })).toBe(false);
     await expect(executarAcao(db, dA.id, 'submeter_escopo', agente)).rejects.toBeInstanceOf(Pausado);
     expect((await executarAcao(db, dB.id, 'submeter_escopo', agente)).etapa).toBe('aguardando_aprovacao_escopo');
+  });
+
+  it('pausa bloqueia criarDemanda de agente, mas não do operador', async () => {
+    await pausar(db, { escopo: 'cliente', alvo: clienteA, motivo: 'incidente' });
+    const p = { clienteId: clienteA, servicoId: 'sob-medida', titulo: 'T' };
+    await expect(criarDemanda(db, p, agente)).rejects.toBeInstanceOf(Pausado);
+    expect(await db.select().from(demandas)).toHaveLength(0);
+    await expect(criarDemanda(db, p, operador)).resolves.toHaveProperty('id');
+    await expect(criarDemanda(db, { ...p, clienteId: clienteB }, agente)).resolves.toHaveProperty('id');
   });
 
   it('pausa por agente afeta só aquele agente', async () => {

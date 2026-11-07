@@ -2,9 +2,15 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
 import { criarDbTeste, type Db } from '../../src/db/cliente.js';
-import { aprovacoes, auditoria, decisoesPolitica, servicosContratados } from '../../src/db/schema.js';
-import { criarCliente, contratarServico } from '../../src/clientes/repositorio.js';
-import { carregarCatalogo } from '../../src/catalogo/carregar.js';
+import { aprovacoes, auditoria, decisoesPolitica, niveisAutonomia, servicosContratados } from '../../src/db/schema.js';
+import {
+  criarCliente,
+  contratarServico,
+  resolverClientePorCanal,
+  vincularCanal,
+  ServicoInexistente,
+} from '../../src/clientes/repositorio.js';
+import { carregarCatalogo, type Catalogo } from '../../src/catalogo/carregar.js';
 import { criarDemanda } from '../../src/esteira/servico.js';
 import type { ConfigPolitica, DefinicaoFerramenta } from '../../src/seguranca/politica.js';
 import { autorizarChamada, definirAutonomia } from '../../src/seguranca/portao.js';
@@ -20,12 +26,19 @@ const cfg: ConfigPolitica = {
   permissoes: { dev: ['ler_repo', 'publicar'] },
 };
 
-async function nivelDe(db: Db, clienteId: string, servicoId: string): Promise<string | undefined> {
+/** Nível efetivo (ausente → N2, como no Portão). */
+async function nivelDe(db: Db, clienteId: string, servicoId: string): Promise<string> {
   const [r] = await db
-    .select({ n: servicosContratados.nivelAutonomia })
+    .select({ n: niveisAutonomia.nivel })
+    .from(niveisAutonomia)
+    .where(and(eq(niveisAutonomia.clienteId, clienteId), eq(niveisAutonomia.servicoId, servicoId)));
+  return r?.n ?? 'N2';
+}
+async function contratos(db: Db, clienteId: string, servicoId: string) {
+  return db
+    .select()
     .from(servicosContratados)
     .where(and(eq(servicosContratados.clienteId, clienteId), eq(servicosContratados.servicoId, servicoId)));
-  return r?.n;
 }
 
 describe('autorizarChamada', () => {
@@ -33,9 +46,10 @@ describe('autorizarChamada', () => {
   let clienteA: string;
   let clienteB: string;
   let dA: string;
+  let catalogo: Catalogo;
   beforeEach(async () => {
     db = await criarDbTeste();
-    const catalogo = await carregarCatalogo('catalogo');
+    catalogo = await carregarCatalogo('catalogo');
     clienteA = (await criarCliente(db, { nome: 'A' }, 'operador')).id;
     clienteB = (await criarCliente(db, { nome: 'B' }, 'operador')).id;
     await contratarServico(db, clienteA, 'sob-medida', {}, catalogo, 'operador');
@@ -79,6 +93,30 @@ describe('autorizarChamada', () => {
     expect(await nivelDe(db, clienteB, 'sob-medida')).toBe('N2');
   });
 
+  it('rebaixamento em serviço não contratado não cria contrato fantasma', async () => {
+    await vincularCanal(db, clienteB, { tipo: 'email', identificador: 'b@x.com' }, 'operador');
+    const antes = await resolverClientePorCanal(db, 'email', 'b@x.com');
+    const dSem = (await criarDemanda(db, { clienteId: clienteB, servicoId: 'planilha-dashboard', titulo: 'Y' }, { tipo: 'operador' })).id;
+    await autorizarChamada(db, cfg, { demandaId: dSem, agente: 'dev', ferramenta: 'apagar', argumentos: {} });
+    expect(await nivelDe(db, clienteB, 'planilha-dashboard')).toBe('N1');
+    expect(await contratos(db, clienteB, 'planilha-dashboard')).toHaveLength(0);
+    expect(await resolverClientePorCanal(db, 'email', 'b@x.com')).toEqual(antes);
+
+    await contratarServico(db, clienteB, 'planilha-dashboard', { planilha: 'p1' }, catalogo, 'operador');
+    const [c] = await contratos(db, clienteB, 'planilha-dashboard');
+    expect(c.configuracao).toEqual({ planilha: 'p1' });
+    const aud = await db.select().from(auditoria).where(eq(auditoria.acao, 'servico.contratado'));
+    expect(aud.map((a) => a.detalhes)).toContainEqual({ servicoId: 'planilha-dashboard' });
+    expect(await nivelDe(db, clienteB, 'planilha-dashboard')).toBe('N1');
+  });
+
+  it('rebaixamento nunca eleva o nível', async () => {
+    await definirAutonomia(db, catalogo, clienteA, 'sob-medida', 'N0', 'operador', 'restrito');
+    await autorizarChamada(db, cfg, { demandaId: dA, agente: 'dev', ferramenta: 'ler_repo', argumentos: { clienteId: clienteB } });
+    expect(await nivelDe(db, clienteA, 'sob-medida')).toBe('N0');
+    expect(await db.select().from(auditoria).where(eq(auditoria.acao, 'autonomia.rebaixada'))).toHaveLength(0);
+  });
+
   it('outras negações não rebaixam, mas são gravadas', async () => {
     const r = await autorizarChamada(db, cfg, { demandaId: dA, agente: 'dev', ferramenta: 'nao_existe', argumentos: {} });
     expect(r).toEqual({ decisao: 'negar', motivo: 'ferramenta_desconhecida' });
@@ -97,7 +135,7 @@ describe('autorizarChamada', () => {
   });
 
   it('nível rebaixado passa a valer na chamada seguinte', async () => {
-    await definirAutonomia(db, clienteA, 'sob-medida', 'N0', 'operador', 'cliente sensível');
+    await definirAutonomia(db, catalogo, clienteA, 'sob-medida', 'N0', 'operador', 'cliente sensível');
     const r = await autorizarChamada(db, cfg, { demandaId: dA, agente: 'dev', ferramenta: 'ler_repo', argumentos: {} });
     expect(r.decisao).toBe('exigir_aprovacao');
     expect(r.motivo).toBe('nivel_N0');
@@ -121,15 +159,18 @@ describe('autorizarChamada', () => {
 describe('definirAutonomia', () => {
   let db: Db;
   let clienteA: string;
+  let catalogo: Catalogo;
   beforeEach(async () => {
     db = await criarDbTeste();
+    catalogo = await carregarCatalogo('catalogo');
     clienteA = (await criarCliente(db, { nome: 'A' }, 'operador')).id;
   });
 
-  it('define o nível (criando o contrato se preciso) e audita', async () => {
-    await definirAutonomia(db, clienteA, 'sob-medida', 'N3', 'operador', 'cliente maduro');
+  it('define o nível (sem criar contrato) e audita', async () => {
+    await definirAutonomia(db, catalogo, clienteA, 'sob-medida', 'N3', 'operador', 'cliente maduro');
     expect(await nivelDe(db, clienteA, 'sob-medida')).toBe('N3');
-    await definirAutonomia(db, clienteA, 'sob-medida', 'N1', 'operador', 'voltar');
+    expect(await contratos(db, clienteA, 'sob-medida')).toHaveLength(0);
+    await definirAutonomia(db, catalogo, clienteA, 'sob-medida', 'N1', 'operador', 'voltar');
     expect(await nivelDe(db, clienteA, 'sob-medida')).toBe('N1');
     const as = await db.select().from(auditoria).where(eq(auditoria.acao, 'autonomia.definida')).orderBy(auditoria.criadoEm);
     expect(as.map((a) => a.detalhes)).toEqual([
@@ -140,7 +181,12 @@ describe('definirAutonomia', () => {
   });
 
   it('exige justificativa', async () => {
-    await expect(definirAutonomia(db, clienteA, 'sob-medida', 'N3', 'operador', '  ')).rejects.toThrow(/justificativa/);
-    expect(await nivelDe(db, clienteA, 'sob-medida')).toBeUndefined();
+    await expect(definirAutonomia(db, catalogo, clienteA, 'sob-medida', 'N3', 'operador', '  ')).rejects.toThrow(/justificativa/);
+    expect(await db.select().from(niveisAutonomia)).toHaveLength(0);
+  });
+
+  it('servicoId fora do catálogo lança ServicoInexistente', async () => {
+    await expect(definirAutonomia(db, catalogo, clienteA, 'nao-existe', 'N3', 'operador', 'x')).rejects.toBeInstanceOf(ServicoInexistente);
+    expect(await db.select().from(niveisAutonomia)).toHaveLength(0);
   });
 });

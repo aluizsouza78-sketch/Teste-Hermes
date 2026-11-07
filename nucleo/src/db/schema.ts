@@ -49,11 +49,24 @@ export const servicosContratados = pgTable(
     clienteId: uuid('cliente_id').notNull().references(() => clientes.id),
     servicoId: text('servico_id').notNull(),
     configuracao: jsonb('configuracao').notNull().default(sql`'{}'::jsonb`),
-    nivelAutonomia: text('nivel_autonomia').notNull().default('N2'),
+  },
+  (t) => [unique('servicos_contratados_cliente_servico_uq').on(t.clienteId, t.servicoId)],
+);
+
+/** Nível de autonomia por cliente+serviço; ausente → N2. Independente do contrato. */
+export const niveisAutonomia = pgTable(
+  'niveis_autonomia',
+  {
+    id: id(),
+    criadoEm: criadoEm(),
+    clienteId: uuid('cliente_id').notNull().references(() => clientes.id),
+    servicoId: text('servico_id').notNull(),
+    nivel: text('nivel').notNull().default('N2'),
+    atualizadoEm: ts('atualizado_em'),
   },
   (t) => [
-    unique('servicos_contratados_cliente_servico_uq').on(t.clienteId, t.servicoId),
-    check('servicos_contratados_nivel_ck', sql`${t.nivelAutonomia} in ('N0','N1','N2','N3')`),
+    unique('niveis_autonomia_cliente_servico_uq').on(t.clienteId, t.servicoId),
+    check('niveis_autonomia_nivel_ck', sql`${t.nivel} in ('N0','N1','N2','N3')`),
   ],
 );
 
