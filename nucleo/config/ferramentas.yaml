@@ -1,0 +1,4 @@
+# Agentes × ferramentas permitidas. Ferramentas reais chegam no Plano 4.
+agentes:
+  gestor:
+    - ler_demanda

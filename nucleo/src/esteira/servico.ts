@@ -3,6 +3,7 @@ import type { Db, Tx } from '../db/cliente.js';
 import { aprovacoes, clientes, demandas } from '../db/schema.js';
 import { registrarAuditoria } from '../auditoria/registrar.js';
 import { SERVICO_SOB_MEDIDA } from '../catalogo/carregar.js';
+import { Pausado, estaPausado } from '../seguranca/pausas.js';
 import { transicionar, type Acao, type Ator, type Etapa, type EstadoDemanda } from './maquina.js';
 
 export class DemandaNaoEncontrada extends Error {
@@ -183,6 +184,10 @@ export function executarAcao(
 ): Promise<EstadoDemanda> {
   return db.transaction(async (tx) => {
     const demanda = await travarDemanda(tx, demandaId);
+    // Pausa de emergência bloqueia agentes; ações do operador seguem permitidas.
+    if (ator.tipo === 'agente' && (await estaPausado(tx, { clienteId: demanda.clienteId, agente: ator.nome }))) {
+      throw new Pausado(demanda.clienteId, ator.nome);
+    }
     return aplicar(tx, demanda, acao, ator, motivo);
   });
 }
