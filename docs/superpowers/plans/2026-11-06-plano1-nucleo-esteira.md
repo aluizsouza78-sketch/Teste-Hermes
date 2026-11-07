@@ -558,3 +558,22 @@ it('POST /politica/autorizar com clienteId de outro cliente → negar escopo_cli
 ## Próximos planos (fora deste)
 
 Plano 2 (canais + classificador Claude + fila Redis), Plano 3 (painel + Telegram), Plano 4 (agentes Escopo/QA/Publicador), Plano 5 (serviços do catálogo), Plano 6 (servidor próprio + migração da hospedagem atual e do app.grupofiori.com.br) — ver spec §14.1.
+
+---
+
+## Resultado da execução e pendências obrigatórias
+
+Plano 1 executado (Tasks 1–10 + correções da revisão final). 186 testes passando; teste de fumaça em Postgres 16 roda no CI.
+
+**Bloqueios do Plano 2 (canais):**
+- A ingestão deve recuperar eventos presos em `recebido` (falha após inserir) em vez de responder `duplicado` — senão mensagens de cliente se perdem silenciosamente.
+
+**Bloqueios do Plano 4 (antes da primeira chamada de um agente real):**
+- Identidade de agente com **token próprio e escopado** (hoje o `agente` é autodeclarado no corpo e o token do operador dá acesso a tudo).
+- **Verificação de posse de recurso** no Portão: ferramentas que recebem ids (ex.: `ler_demanda {demandaId}`) devem confirmar que o recurso pertence ao `clienteId` da demanda; hoje só `clienteId` no topo dos argumentos é checado.
+- O Portão deve **travar a demanda e recusar demandas canceladas/encerradas**.
+- O executor deve **re-checar a pausa** antes de executar uma ação aprovada.
+
+**Para o Plano 3 (painel):** rota de configuração de orçamentos; fila de revisão de eventos em `revisao_humana`; tela de aprovação mostrando ferramenta e argumentos exatos (já expostos por `GET /aprovacoes`).
+
+**Para o Plano 6 (servidor):** migrador em runtime (drizzle-kit é devDependency); papel de banco da aplicação sem TRUNCATE/ownership; host configurável (hoje 0.0.0.0); Postgres ≥ 15.
