@@ -212,6 +212,24 @@ describe('serviço da esteira', () => {
     expect(await listarAprovacoesPendentes(db)).toHaveLength(0);
   });
 
+  it('cancelar durante aguardando aprovação fecha aprovações pendentes (escopo e acao)', async () => {
+    const d = await nova();
+    await executarAcao(db, d.id, 'submeter_escopo', agente);
+    const [acao] = await db.insert(aprovacoes).values({ demandaId: d.id, tipo: 'acao' }).returning();
+    const escopo = await pendente(db, d.id, 'escopo');
+    expect((await executarAcao(db, d.id, 'cancelar', operador)).etapa).toBe('cancelada');
+    expect(await listarAprovacoesPendentes(db)).toHaveLength(0);
+    for (const id of [escopo.id, acao.id]) {
+      const [r] = await db.select().from(aprovacoes).where(eq(aprovacoes.id, id));
+      expect(r.status).toBe('recusada');
+      expect(r.comentario).toBe('demanda cancelada');
+      expect(r.decididoEm).not.toBeNull();
+      const aud = await db.select().from(auditoria).where(and(eq(auditoria.alvoId, id), eq(auditoria.acao, 'aprovacao.decidida')));
+      expect(aud).toHaveLength(1);
+      expect(aud[0].detalhes).toMatchObject({ automatico: true, motivo: 'demanda_cancelada' });
+    }
+  });
+
   it('aprovação do tipo acao só registra a decisão, sem transição', async () => {
     const d = await nova();
     const [ap] = await db.insert(aprovacoes).values({ demandaId: d.id, tipo: 'acao' }).returning();

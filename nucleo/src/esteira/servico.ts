@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { Db, Tx } from '../db/cliente.js';
 import { aprovacoes, clientes, demandas } from '../db/schema.js';
 import { registrarAuditoria } from '../auditoria/registrar.js';
@@ -120,6 +120,22 @@ async function aplicar(
       ...extraAuditoria,
     },
   });
+  if (r.etapa === 'cancelada') {
+    const fechadas = await tx
+      .update(aprovacoes)
+      .set({ status: 'recusada', comentario: 'demanda cancelada', decididoEm: new Date() })
+      .where(and(eq(aprovacoes.demandaId, demanda.id), eq(aprovacoes.status, 'pendente')))
+      .returning({ id: aprovacoes.id, tipo: aprovacoes.tipo });
+    for (const f of fechadas) {
+      await registrarAuditoria(tx, {
+        ator: nomeAtor(ator),
+        acao: 'aprovacao.decidida',
+        alvoTipo: 'aprovacao',
+        alvoId: f.id,
+        detalhes: { demandaId: demanda.id, tipo: f.tipo, decisao: 'recusar', automatico: true, motivo: 'demanda_cancelada' },
+      });
+    }
+  }
   if (r.abrirAprovacao) {
     const [ap] = await tx
       .insert(aprovacoes)
