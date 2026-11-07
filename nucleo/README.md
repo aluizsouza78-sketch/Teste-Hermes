@@ -7,6 +7,7 @@ Status atual (Plano 1): o núcleo, a API HTTP e o catálogo de serviços estão 
 ## Requisitos
 
 - Node.js 22
+- PostgreSQL 15 ou superior (as migrações usam recursos do 15, como `NULLS NOT DISTINCT`). O `docker-compose.dev.yml` já sobe uma versão compatível.
 - Docker (para o Postgres de desenvolvimento)
 
 ## Rodando localmente
@@ -32,6 +33,7 @@ Status atual (Plano 1): o núcleo, a API HTTP e o catálogo de serviços estão 
    | `DATABASE_URL` | Conexão Postgres |
    | `OPERADOR_TOKEN` | Token Bearer de todas as rotas da API (mínimo 32 caracteres) |
    | `PORTA` | Porta HTTP (padrão 3000) |
+   | `LOG_LEVEL` | Nível de log JSON (pino): `trace`, `debug`, `info` (padrão), `warn`, `error`, `fatal`. O header `Authorization` nunca é registrado |
 
 3. Instale as dependências e aplique as migrações:
 
@@ -43,11 +45,13 @@ Status atual (Plano 1): o núcleo, a API HTTP e o catálogo de serviços estão 
 
    As migrações ficam em `nucleo/drizzle/`. Para gerar uma nova migração depois de alterar `src/db/schema.ts`, use `npm run db:gerar`.
 
-4. Suba o servidor em modo de desenvolvimento (recarrega ao salvar):
+4. Suba o servidor em modo de desenvolvimento (recarrega ao salvar arquivos `.ts`):
 
    ```bash
    npm run dev
    ```
+
+   O código não lê o `.env` sozinho: as variáveis precisam estar carregadas (`set -a; . ./.env; set +a`) **no mesmo shell** que roda `npm run dev` ou `npm start`. Em um terminal novo, carregue de novo antes de subir.
 
    Verifique com `curl http://localhost:3000/saude`, que responde `{"ok":true}` sem autenticação.
 
@@ -126,7 +130,16 @@ curl -s "${H[@]}" -X POST "$API/aprovacoes/$APROVACAO/decisao" \
   -d '{"decisao":"aprovar","comentario":"Escopo confirmado"}'
 ```
 
-Ações de agente aceitas em `/demandas/:id/acoes`: `submeter_escopo`, `concluir_construcao`, `qa_aprovado`, `qa_reprovado`, `producao_ok`, `producao_falhou`, `escalar` (exige `motivo`) e `cancelar`. Aprovar, recusar, retomar e a decisão de aprovações são exclusivos do operador. Ação fora de ordem responde `409`.
+Ações de agente aceitas em `/demandas/:id/acoes`: `submeter_escopo`, `concluir_construcao`, `qa_aprovado`, `qa_reprovado`, `producao_ok`, `producao_falhou` e `escalar` (exige `motivo`). Aprovar, recusar, retomar, cancelar e a decisão de aprovações são exclusivos do operador. Ação fora de ordem responde `409`.
+
+`GET /aprovacoes` mostra o fato exato a aprovar: cada item traz `detalhes` como gravado (`{ferramenta, argumentos}` em aprovações do tipo `acao`; `{motivo}` em `escalada`) e a `etapa` atual da demanda.
+
+**Cancelar uma demanda** (ação do operador, `200` com o novo estado). Fecha como recusadas as aprovações pendentes da demanda. Demanda inexistente responde `404`; já cancelada, `409`:
+
+```bash
+curl -s "${H[@]}" -X POST "$API/demandas/$DEMANDA/cancelar" \
+  -d '{"motivo":"Cliente desistiu do pedido"}'
+```
 
 Outras rotas úteis: `GET /clientes`, `GET /demandas`, `GET /auditoria?alvoId=…&limite=100`, `PUT /clientes/:id/servicos/:servicoId/autonomia`, `POST /politica/autorizar`, `POST /execucoes` (com `/consumo` e `/fim`).
 
@@ -161,12 +174,13 @@ Regras, verificadas na carga do catálogo (o serviço não sobe se alguma regra 
 - `id` deve ser único entre os arquivos. O arquivo `sob-medida.yaml` é obrigatório.
 - Arquivos com YAML inválido ou campos fora do formato impedem a inicialização, com a mensagem indicando o arquivo e o campo.
 
-Depois de criar o arquivo, reinicie o serviço (`npm run dev` recarrega sozinho) e confira em `GET /catalogo`.
+Depois de criar ou alterar o arquivo, reinicie o serviço e confira em `GET /catalogo`. O catálogo é lido só na inicialização; `npm run dev` recarrega ao salvar código `.ts`, não ao alterar YAML.
 
 ## Testes e CI
 
 - Local: `cd nucleo && npm ci && npx tsc --noEmit && npm test`.
-- GitHub Actions: `.github/workflows/nucleo.yml` roda essas três etapas em Node 22 a cada push e pull request que altere `nucleo/**` ou o próprio workflow.
+- GitHub Actions: `.github/workflows/nucleo.yml` roda essas três etapas em Node 22 a cada push e pull request que altere `nucleo/**` ou o próprio workflow. Um segundo job sobe `postgres:16`, aplica as migrações com `npx drizzle-kit migrate` e roda o smoke test `test/integracao/postgres.smoke.test.ts` (cliente → demanda → aprovação de escopo em Postgres real).
+- Smoke test local contra um Postgres já migrado: `DATABASE_URL_TESTE_PG=$DATABASE_URL npx vitest run test/integracao`. Sem a variável, o teste é pulado.
 
 ## Estrutura
 

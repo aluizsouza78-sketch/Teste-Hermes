@@ -246,7 +246,7 @@ Casos reais de tentativa de injeção detectados em produção entram na suíte 
 
 | Plano | Mudança |
 |-------|---------|
-| **1 — Núcleo** | `eventos.origem_confianca`; tabela `execucoes_agente`; `nivel_autonomia` em `servicos_contratados` (padrão `N2`); tabela `decisoes_politica`; módulo **Portão de Políticas** (puro, testado) e **orçamentos**; estados `pausado` global/por cliente/por agente |
+| **1 — Núcleo** | `eventos.origem_confianca`; tabela `execucoes_agente`; tabela `niveis_autonomia` por cliente+serviço (ausente = `N2`; independente de `servicos_contratados`); tabela `decisoes_politica`; módulo **Portão de Políticas** (puro, testado) e **orçamentos**; estados `pausado` global/por cliente/por agente |
 | **2 — Canais + IA** | Classificador em quarentena (sem ferramentas, saída Zod); mascaramento de dados pessoais; limite por canal; suíte de avaliações de injeção e de triagem no CI |
 | **3 — Painel** | Aprovação mostra ação + argumentos exatos; escape de saída de LLM; botão de emergência; tela de rastros e alertas |
 | **4 — Agentes** | Sandbox com rede negada por padrão; proxy de pacotes; credenciais de curta duração e canários; todas as ferramentas via Portão |
