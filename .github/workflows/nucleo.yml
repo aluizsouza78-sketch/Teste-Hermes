@@ -36,3 +36,44 @@ jobs:
 
       - name: Testes
         run: npm test
+
+  postgres:
+    # Roda migrações e um smoke test da esteira em Postgres real (a suíte principal usa PGlite).
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nucleo
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nucleo
+          POSTGRES_PASSWORD: nucleo
+          POSTGRES_DB: nucleo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nucleo -d nucleo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://nucleo:nucleo@localhost:5432/nucleo
+      DATABASE_URL_TESTE_PG: postgres://nucleo:nucleo@localhost:5432/nucleo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: nucleo/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Aplicar migrações
+        run: npx drizzle-kit migrate
+
+      - name: Smoke test em Postgres
+        run: npx vitest run test/integracao/postgres.smoke.test.ts

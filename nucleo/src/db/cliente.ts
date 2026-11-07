@@ -14,6 +14,11 @@ export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 export function criarDb(url: string): Db {
   const pool = new pg.Pool({ connectionString: url });
+  // Sem listener, um erro numa conexão ociosa (ex.: Postgres reiniciado) derruba o processo.
+  // O pool descarta a conexão quebrada e abre outra na próxima consulta.
+  pool.on('error', (err) => {
+    console.error(`Erro em conexão ociosa do Postgres: ${err.message}`);
+  });
   return drizzlePg(pool, { schema }) as unknown as Db;
 }
 
