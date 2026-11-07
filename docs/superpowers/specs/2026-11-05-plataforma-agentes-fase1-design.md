@@ -244,6 +244,8 @@ Acessível **somente via Tailscale**. Telas:
 
 ---
 
+> **Segurança de IA (LLM, RAG, agentes autônomos):** ver `2026-11-07-seguranca-ia-design.md`, que prevalece nesses temas.
+
 ## 12. Tecnologia
 
 | Camada | Escolha |
