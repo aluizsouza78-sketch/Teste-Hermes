@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: nucleo
+      POSTGRES_PASSWORD: nucleo
+      POSTGRES_DB: nucleo
+    ports:
+      - "5432:5432"
+    volumes:
+      - nucleo_pgdata:/var/lib/postgresql/data
+
+volumes:
+  nucleo_pgdata:
