@@ -160,6 +160,16 @@ describe('API HTTP', () => {
     expect((await req('POST', `/demandas/${demandaId}/acoes`, { acao: 'submeter_escopo', agente: 'gestor' })).statusCode).toBe(200);
   });
 
+  it('pausa por cliente: alvo não-UUID → 400; UUID inexistente → 404; cliente real → 201 e agente 423', async () => {
+    const { clienteId, demandaId } = await novaDemanda();
+    const r1 = await req('POST', '/pausas', { escopo: 'cliente', alvo: 'Fiori', motivo: 'm' });
+    expect(r1.statusCode).toBe(400);
+    expect(r1.body).toContain('alvo');
+    expect((await req('POST', '/pausas', { escopo: 'cliente', alvo: '11111111-1111-4111-8111-111111111111', motivo: 'm' })).statusCode).toBe(404);
+    expect((await req('POST', '/pausas', { escopo: 'cliente', alvo: clienteId, motivo: 'm' })).statusCode).toBe(201);
+    expect((await req('POST', `/demandas/${demandaId}/acoes`, { acao: 'submeter_escopo', agente: 'gestor' })).statusCode).toBe(423);
+  });
+
   it('POST /politica/autorizar com clienteId de outro cliente → negar escopo_cliente', async () => {
     const { demandaId } = await novaDemanda();
     const ok = await req('POST', '/politica/autorizar', { demandaId, agente: 'gestor', ferramenta: 'ler_demanda', argumentos: { demandaId } });

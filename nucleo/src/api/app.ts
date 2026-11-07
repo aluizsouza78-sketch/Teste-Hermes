@@ -102,6 +102,10 @@ const esquemas = {
       const tem = p.alvo !== undefined && p.alvo !== '';
       if (p.escopo === 'global' && tem) ctx.addIssue({ code: 'custom', path: ['alvo'], message: 'Pausa global não aceita alvo' });
       if (p.escopo !== 'global' && !tem) ctx.addIssue({ code: 'custom', path: ['alvo'], message: `Pausa por ${p.escopo} exige alvo` });
+      // Pausa por cliente compara alvo com clienteId por igualdade: só UUID faz sentido.
+      if (p.escopo === 'cliente' && tem && !id.safeParse(p.alvo).success) {
+        ctx.addIssue({ code: 'custom', path: ['alvo'], message: 'alvo deve ser o UUID do cliente' });
+      }
     }),
   execucao: z.object({ demandaId: id, agente: textoNaoVazio, modelo: textoNaoVazio, versaoPrompt: textoNaoVazio }),
   consumo: z.object({
@@ -252,6 +256,7 @@ export function construirApp(deps: DepsApi): FastifyInstance {
 
     r.post('/pausas', async (req, reply) => {
       const b = esquemas.pausa.parse(req.body);
+      if (b.escopo === 'cliente' && b.alvo) await garantirCliente(b.alvo);
       const p = await pausar(db, { escopo: b.escopo, ...(b.alvo ? { alvo: b.alvo } : {}), motivo: b.motivo });
       return reply.status(201).send(p);
     });
