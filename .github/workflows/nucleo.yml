@@ -1,0 +1,38 @@
+name: nucleo
+
+on:
+  push:
+    paths:
+      - 'nucleo/**'
+      - '.github/workflows/nucleo.yml'
+  pull_request:
+    paths:
+      - 'nucleo/**'
+      - '.github/workflows/nucleo.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nucleo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: nucleo/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Checagem de tipos
+        run: npx tsc --noEmit
+
+      - name: Testes
+        run: npm test
