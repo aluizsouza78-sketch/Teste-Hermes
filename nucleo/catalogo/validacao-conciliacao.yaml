@@ -1,0 +1,15 @@
+id: validacao-conciliacao
+nome: Validação/Conciliação
+entradas_escopo:
+  - canais/grupos a monitorar
+  - "o que extrair (ex.: valor, identificador, data)"
+  - como consultar o sistema do cliente (API/banco, somente leitura)
+  - tolerâncias
+  - para quem alertar
+construtor: agente-validacao
+repo_modelo: null
+testes_qa_extras:
+  - acerto_conjunto_rotulado_min_98
+publicacao: rotina
+rotinas_operacao:
+  - validar_eventos

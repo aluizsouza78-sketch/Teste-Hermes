@@ -1,0 +1,8 @@
+id: planilha-dashboard
+nome: Planilha → Dashboard
+entradas_escopo: []
+construtor: agente-dados-bi
+repo_modelo: modelos/dashboard
+testes_qa_extras: []
+publicacao: container-web
+rotinas_operacao: []

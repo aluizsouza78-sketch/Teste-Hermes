@@ -1,0 +1,15 @@
+id: planilha-dashboard
+nome: Planilha → Dashboard
+entradas_escopo:
+  - planilha (xlsx/csv)
+  - indicadores desejados
+  - quem terá acesso
+construtor: agente-dados-bi
+repo_modelo: modelos/dashboard
+testes_qa_extras:
+  - conferencia_totais_com_origem
+  - filtros_retornam_subconjunto_correto
+  - acesso_somente_autenticado
+publicacao: container-web
+rotinas_operacao:
+  - atualizar_dados

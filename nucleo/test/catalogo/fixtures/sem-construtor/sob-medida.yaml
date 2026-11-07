@@ -1,0 +1,8 @@
+id: sob-medida
+nome: Sob medida
+entradas_escopo: []
+construtor: agente-dev
+repo_modelo: null
+testes_qa_extras: []
+publicacao: definida-no-escopo
+rotinas_operacao: []
