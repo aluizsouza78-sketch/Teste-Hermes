@@ -245,7 +245,7 @@ export const orcamentos = pgTable(
     limiteDiarioCentavos: integer('limite_diario_centavos').notNull(),
   },
   (t) => [
-    unique('orcamentos_escopo_cliente_uq').on(t.escopo, t.clienteId),
+    unique('orcamentos_escopo_cliente_uq').on(t.escopo, t.clienteId).nullsNotDistinct(),
     check('orcamentos_escopo_ck', sql`${t.escopo} in ('global','cliente')`),
   ],
 );

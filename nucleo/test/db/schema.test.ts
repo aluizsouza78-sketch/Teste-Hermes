@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { criarDbTeste } from '../../src/db/cliente.js';
-import { auditoria, canaisCliente, clientes, decisoesPolitica, demandas, eventos } from '../../src/db/schema.js';
+import { auditoria, canaisCliente, clientes, decisoesPolitica, demandas, eventos, orcamentos } from '../../src/db/schema.js';
 import { registrarAuditoria } from '../../src/auditoria/registrar.js';
 
 // Drizzle envolve o erro do driver em DrizzleQueryError; a mensagem do banco fica em `cause`.
@@ -15,6 +15,12 @@ describe('schema', () => {
     await expect(
       db.insert(canaisCliente).values({ clienteId: b.id, tipo: 'whatsapp_grupo', identificador: 'g1' }),
     ).rejects.toThrow();
+  });
+
+  it('orçamento global é único (NULL em cliente_id não duplica)', async () => {
+    const db = await criarDbTeste();
+    await db.insert(orcamentos).values({ escopo: 'global', limiteDiarioCentavos: 100 });
+    await expect(db.insert(orcamentos).values({ escopo: 'global', limiteDiarioCentavos: 200 })).rejects.toThrow();
   });
 
   it('auditoria rejeita UPDATE e DELETE', async () => {

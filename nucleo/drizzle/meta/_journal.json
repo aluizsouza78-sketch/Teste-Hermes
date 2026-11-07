@@ -22,6 +22,13 @@
       "when": 1794051794509,
       "tag": "0002_autonomia_em_tabela_propria",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794052088528,
+      "tag": "0003_flimsy_earthquake",
+      "breakpoints": true
     }
   ]
 }

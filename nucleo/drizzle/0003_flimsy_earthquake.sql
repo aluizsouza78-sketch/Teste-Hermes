@@ -1,0 +1,2 @@
+ALTER TABLE "orcamentos" DROP CONSTRAINT "orcamentos_escopo_cliente_uq";--> statement-breakpoint
+ALTER TABLE "orcamentos" ADD CONSTRAINT "orcamentos_escopo_cliente_uq" UNIQUE NULLS NOT DISTINCT("escopo","cliente_id");
