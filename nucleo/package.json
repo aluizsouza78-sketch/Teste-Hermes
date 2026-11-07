@@ -7,7 +7,8 @@
     "test": "vitest run",
     "build": "tsc",
     "db:gerar": "drizzle-kit generate",
-    "dev": "tsx watch src/principal.ts"
+    "dev": "tsx watch src/principal.ts",
+    "start": "tsx src/principal.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.15",
