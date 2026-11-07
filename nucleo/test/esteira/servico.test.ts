@@ -75,7 +75,7 @@ describe('serviço da esteira', () => {
     expect(estado.etapa).toBe('operacao');
     expect(await contarAprovacoes(db, d.id, 'aprovada')).toBe(2);
     const trans = await db.select().from(auditoria).where(eq(auditoria.acao, 'demanda.transicao'));
-    expect(trans.length).toHaveLength(6);
+    expect(trans).toHaveLength(6);
     const [a] = await db.select().from(auditoria).where(eq(auditoria.acao, 'aprovacao.decidida'));
     expect(a.ator).toBe('operador');
   });
